@@ -1,5 +1,5 @@
-PPJ99
-=====
+PP/J99
+======
 
 Incomplete preprocessor for C99.
 

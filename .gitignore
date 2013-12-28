@@ -3,7 +3,7 @@
 /bin
 /ant-bin
 
-/ppj99.jar
+/ppj99-*.jar
 
 # vim
 *.swp

@@ -8,9 +8,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
-import java.io.Reader;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -21,19 +18,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import se.llbit.j99.fragment.CommentFragmenter;
-import se.llbit.j99.fragment.CompositeFragment;
-import se.llbit.j99.fragment.Fragment;
-import se.llbit.j99.fragment.FragmentReader;
-import se.llbit.j99.fragment.Fragmenter;
-import se.llbit.j99.fragment.LineFragment;
-import se.llbit.j99.fragment.LineFragmenter;
-import se.llbit.j99.fragment.LineSplicer;
-import se.llbit.j99.fragment.TrigraphReplacer;
-import se.llbit.j99.parser.Symbol;
-import se.llbit.j99.problem.CompileProblem;
-import se.llbit.j99.util.DirectiveParser;
 
 @RunWith(Parameterized.class)
 public class TestPP {
@@ -89,41 +73,15 @@ public class TestPP {
 		String testCase = TEST_ROOT + test + "/test.c";
 		String basePath = "";
 		InputStream in = new FileInputStream(testCase);
+
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-		ArrayList<CompileProblem> problems = new ArrayList<CompileProblem>();
-		Fragmenter fragmenter = new CommentFragmenter(new LineSplicer(new TrigraphReplacer(
-						new LineFragmenter(testCase, in))), problems);
-
-		PPState state = new PPState();
-		state.setProblemCollection(problems);
-		state.setIncludeDirs(new LinkedList<String>());
-		// predefined macros
-		// TODO: these need to be attached to the root tree
-		state.define(new Identifier("_WIN32_"),
-				new ObjMacro(new Identifier("_WIN32_"),
-				new se.llbit.j99.pp.List<se.llbit.j99.pp.Token>()));
-
-		Fragment processed = preprocess(fragmenter, state, testCase, basePath);
-
-		in.close();
-
 		ByteArrayOutputStream errout = new ByteArrayOutputStream();
-		CompileProblem.reportProblems(problems, new PrintStream(errout));
+
+		PP pp = new PP();
+		pp.preprocess(testCase, basePath, in, out, errout);
+
+		stdout = new String(out.toByteArray());
 		stderr = new String(errout.toByteArray());
-		if (!CompileProblem.isCritical(problems)) {
-
-			Reader reader = new FragmentReader(processed);
-
-			while (reader.ready()) {
-				out.write((char)reader.read());
-			}
-			reader.close();
-			out.close();
-			stdout = new String(out.toByteArray());
-		} else {
-			stdout = "";
-		}
 
 		String expectedOut = readFileToString(new File(TEST_ROOT + test, "out.expected"));
 		String expectedErr = readFileToString(new File(TEST_ROOT + test, "err.expected"));
@@ -154,22 +112,6 @@ public class TestPP {
 		scanner.close();
 		theString = theString.replace(SYS_LINE_SEP, "\n");
 		return theString;
-	}
-
-	private static Fragment preprocess(Fragmenter in, PPState state, String fn, String basePath) {
-		Identifier name = new Identifier("__FILE__");
-		StringLit filename = new StringLit("\""+fn+"\"");
-		name.setToken(new Symbol(new LineFragment("@j99", 0, 0, "__FILE__")));
-		filename.setToken(new Symbol(new LineFragment("@j99", 0, 0, "\""+fn+"\"")));
-		Macro fileMacro = new ObjMacro(name,
-				new se.llbit.j99.pp.List<se.llbit.j99.pp.Token>().add(filename));// TODO: this needs to be attached to the root tree
-		state.define(name, fileMacro);
-
-		DirectiveParser parser = new DirectiveParser(in, state);
-		SourceFile root = parser.parse();
-		PPVisitor visitor = new PPVisitor(state, basePath);
-		root.accept(visitor);
-		return new CompositeFragment(visitor.getResult());
 	}
 
 }

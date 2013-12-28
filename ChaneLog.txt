@@ -1,0 +1,7 @@
+1.0.1
+
+    * Added pretty-printing main class
+
+1.0.0
+
+    * Added JUnit test cases
