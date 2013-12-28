@@ -1,0 +1,123 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+%header {:
+ package se.llbit.j99.sp;
+ import java.util.Collection;
+ import java.io.*;
+ import se.llbit.j99.pp.*;
+ import se.llbit.j99.util.*;
+ import se.llbit.j99.fragment.*;
+ import se.llbit.j99.problem.*;
+ import se.llbit.j99.sp.PPScanner;
+:};
+%embed {:
+	static public class MyEvents extends Parser.Events {
+		String filename;
+		Collection<CompileProblem> problems;
+
+		public MyEvents(String fn, Collection<CompileProblem> p) {
+			filename = fn;
+			problems = p;
+		}
+
+		public void scannerError(Scanner.Exception e) {
+			problems.add(new CompileError(new PointMarker(filename, e.line, e.column), e.getMessage()));
+		}
+
+		public void syntaxError(Symbol token) {
+			String msg = "unexpected token: "+strToken(token);
+			problems.add(new CompileError(new FragmentMarker((j99.castor.Symbol) token), msg));
+		}
+
+		public void unexpectedTokenRemoved(Symbol token) {
+			String msg = "unexpected token removed: "+strToken(token);
+			problems.add(new CompileError(new FragmentMarker((j99.castor.Symbol) token), msg));
+		}
+
+		public void missingTokenInserted(Symbol token) {
+			String msg = "missing token inserted: "+strToken(token);
+			problems.add(new CompileError(new PointMarker(filename,
+				Symbol.getLine(token.getStart()),
+				Symbol.getColumn(token.getStart())), msg));
+		}
+
+		public void misspelledTokenReplaced(Symbol token) {
+			String msg = "misspelled token replaced: "+strToken(token);
+			//problems.add(new CompileError(new FragmentMarker((j99.castor.Symbol) token), msg));
+			problems.add(new CompileError(new PointMarker(filename,
+				Symbol.getLine(token.getStart()),
+				Symbol.getColumn(token.getStart())), msg));
+		}
+
+		public void errorPhraseRemoved(Symbol error) {
+			String msg = "error phrase removed: "+strToken(error);
+			problems.add(new CompileError(new FragmentMarker((j99.castor.Symbol) error), msg));
+		}
+
+		private String strToken(Symbol token) {
+			String str = "";
+			if (token.value != null) {
+				str += "\""+token.value+"\" ";
+			}
+			str += "("+Terminals.NAMES[token.getId()]+")";
+			return str;
+		}
+	}
+
+	PPScanner scanner;
+
+	private ASTNode collectRange(ASTNode a, Symbol start, Symbol end) {
+		a.setFirstToken((j99.castor.Symbol) start);
+		a.setLastToken((j99.castor.Symbol) end);
+		return a;
+	}
+
+	private ASTNode collectRangeStart(ASTNode a, Symbol start) {
+		a.setFirstToken((j99.castor.Symbol) start);
+		return a;
+	}
+
+	private ASTNode collectRange(ASTNode a, Symbol token) {
+		a.setFirstToken((j99.castor.Symbol) token);
+		a.setLastToken((j99.castor.Symbol) token);
+		return a;
+	}
+
+	public SourceFile parse(IFragment in, String fn, Collection<CompileProblem> problems)
+		throws java.io.IOException, beaver.Parser.Exception {
+			report = new MyEvents(fn, problems);
+			scanner = new PPScanner(in);
+			return (SourceFile) parse(scanner);
+	}
+
+	public Token parseToken(IFragment in, String fn, Collection<CompileProblem> problems)
+		throws java.io.IOException, beaver.Parser.Exception {
+			report = new MyEvents(fn, problems);
+			scanner = new PPScanner(in);
+			return (Token) parse(scanner, AltGoals.token);
+	}
+:};
+
+%goal goal;
+%goal token;
+
+SourceFile goal =
+ directive.a*         {: return new SourceFile(a); :}
+;
+

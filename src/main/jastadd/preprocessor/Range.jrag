@@ -1,0 +1,120 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect Range {
+	private String SourceFile.fileName = "";
+	public void SourceFile.setFileName(String fn) {
+		fileName = fn;
+	}
+	
+	inh String ASTNode.getFileName();
+	eq SourceFile.getChild(int index).getFileName() = fileName;
+
+	protected se.llbit.j99.parser.Symbol ASTNode.firstToken;
+	protected se.llbit.j99.parser.Symbol ASTNode.lastToken;
+	protected Fragment ASTNode.fragment;
+	public void ASTNode.setFirstToken(se.llbit.j99.parser.Symbol token) {
+		firstToken = token;
+	}
+	public void ASTNode.setLastToken(se.llbit.j99.parser.Symbol token) {
+		lastToken = token;
+	}
+	public void ASTNode.setToken(se.llbit.j99.parser.Symbol token) {
+		firstToken = lastToken = token;
+	}
+	public void ASTNode.setFragment(Fragment fragment) {
+		this.fragment = fragment;
+	}
+	public Fragment ASTNode.getFragment() {
+		if (fragment != null)
+			return fragment;
+		se.llbit.j99.parser.Symbol first = getFirstToken();
+		se.llbit.j99.parser.Symbol last = getLastToken();
+		return fragment = getFirstToken().getSourceFragment().part(
+				first.getOffset(),
+				last.getOffset()+last.getLength());
+	}
+	public Fragment SubstToken.getFragment() {
+		ArrayList<Fragment> src = new ArrayList<Fragment>();
+		for (Token tok : getSourceList()) {
+			src.add(tok.getFragment());
+		}
+		ArrayList<Fragment> repl = new ArrayList<Fragment>();
+		for (Token tok : getReplacementList()) {
+			repl.add(tok.getFragment());
+		}
+		return new ReplacedFragment(new CompositeFragment(src),
+				new CompositeFragment(repl));
+	}
+	public Fragment ReplToken.getFragment() {
+		ArrayList<Fragment> repl = new ArrayList<Fragment>();
+		for (Token tok : getReplacementList()) {
+			repl.add(tok.getFragment());
+		}
+		return new ReplacedFragment(getSource().getFragment(),
+				new CompositeFragment(repl));
+	}
+	public Fragment Placeholder.getFragment() {
+		return new NullFragment();
+	}
+	public Fragment TokenRef.getFragment() {
+		return getRef().getFragment();
+	}
+	public se.llbit.j99.parser.Symbol ASTNode.getFirstToken() {
+		for (int i = 0; firstToken == null && i < getNumChild(); ++i) {
+			firstToken = getChild(i).getFirstToken();
+		}
+		if (firstToken == null)
+			throw new IllegalStateException(getClass().getName()+": node is missing source token");
+		return firstToken;
+	}
+	public se.llbit.j99.parser.Symbol TokenRef.getFirstToken() {
+		return getRef().getFirstToken();
+	}
+	public se.llbit.j99.parser.Symbol ASTNode.getLastToken() {
+		for (int i = getNumChild() - 1; lastToken == null && i >= 0; --i) {
+			lastToken = getChild(i).getLastToken();
+		}
+		if (lastToken == null)
+			throw new IllegalStateException(getClass().getName()+": node is missing source token");
+		return lastToken;
+	}
+	public se.llbit.j99.parser.Symbol TokenRef.getLastToken() {
+		return getRef().getLastToken();
+	}
+	public int ASTNode.getBeginColumn() {
+		return getFirstToken() != null ?
+			getFirstToken().getBeginColumn() : 0;
+	}
+	public int ASTNode.getBeginLine() {
+		return getFirstToken() != null ?
+			getFirstToken().getBeginLine() : 0;
+	}
+	public int ASTNode.getEndColumn() {
+		return getLastToken() != null ?
+			getLastToken().getEndColumn()+1 : 0;
+	}
+	public int ASTNode.getEndLine() {
+		return getLastToken() != null ?
+			getLastToken().getEndLine() : 0;
+	}
+	public String ASTNode.getExtraMsg() {
+		return "";
+	}
+}

@@ -1,0 +1,208 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * This aspect contains attributes to define whether a preprocessor
+ * directive is "well-formed".
+ *
+ * A preprocessor directive is well-formed if there are no syntax
+ * errors such as missing right parenthesis in the parameter list
+ * of a function-like macro.
+ */
+aspect Validation {
+
+	public class Validator {
+
+		/**
+ 		 * Used to check if a Define has correct form.
+ 		 */
+		public static boolean validate(Define d, PPState state) {
+			if (!d.token(0).isIdentifier()) {
+				state.problem(new CompileError(d.getFragment(),
+							"#define preprocessor directive does not declare a valid macro name"));
+				return false;
+			}
+
+			if (d.isFuncMacro()) {
+				return validateFuncMacro(d, state);
+			} else {
+				return validateObjMacro(d, state);
+			}
+		}
+
+		public static boolean validateFuncMacro(Define d, PPState state) {
+			/**
+ 			 * This is a function-like macro
+ 			 *
+ 			 * 1. parameter list must consist of identifiers
+ 			 * 2. parameter list may have ellipsis at the end
+ 			 * 3. need a whitespace between parameter list and replacement-list
+ 			 */
+			int start = d.getTokenList().getIndexOfChild(d.token(1));
+			int end = start+1;
+			boolean haveParam = false;
+			boolean haveId = false;
+			boolean haveEllipsis = false;
+			for (; end < d.getNumToken(); ++end) {
+				Token last = d.getToken(end);
+				if (last.isRParen())
+					break;
+				if (haveEllipsis) {
+					if (!last.isWS()) {
+						state.problem(new CompileError(last.getFragment(),
+									"expected ) to complete parameter list"));
+						return false;
+					}
+				} else if (haveId) {
+					if (last.isComma()) {
+						haveId = false;
+						haveParam = true;
+					} else if (!last.isWS()) {
+						// expected comma or whitespace
+						state.problem(new CompileError(last.getFragment(),
+									"expected comma or whitespace"));
+						return false;
+					}
+				} else {
+					if (last.isIdentifier()) {
+						haveId = true;
+						haveParam = true;
+					} else if (last.isEllipsis()) {
+						haveEllipsis = true;
+						haveParam = true;
+					} else if (!last.isWS()) {
+						// expected identifier or whitespace
+						state.problem(new CompileError(last.getFragment(),
+									"expected identifier or whitespace"));
+						return false;
+					}
+				}
+			}
+			if (end >= d.getNumToken()) {
+				// missing ')'
+				state.problem(new CompileError(d.getToken(d.getNumToken()-1).getFragment(),
+							"expected closing )"));
+				return false;
+			}
+			if (!haveParam) {
+				// malformed parameter list
+				state.problem(new CompileError(d.getFragment(),
+							"function-like macros must have at least one parameter"));
+				return false;
+			}
+			if (end+1 < d.getNumToken() && !d.getToken(end+1).isWS()) {
+				// no whitespace after parameter list
+				state.problem(new CompileError(d.getToken(end+1).getFragment(),
+							"expected whitespace between parameter list and replacement list"));
+				return false;
+			}
+
+			if (d.isFuncMacro()) {
+				return checkFuncMacroReplacementList((FuncMacro) d.getMacro(), state);
+			} else {
+				return checkObjMacroReplacementList((ObjMacro) d.getMacro(), state);
+			}
+		}
+
+		/**
+ 		 * Check correct use of # and ## in the replacement list.
+ 		 */
+		private static boolean checkFuncMacroReplacementList(FuncMacro m, PPState state) {
+			boolean prevParam = false;
+			for (int i = 0; i < m.getNumReplacement(); ++i) {
+				Token token = m.getReplacement(i);
+				if (m.hasParam(token))
+					prevParam = true;
+				else if (!token.isWS())
+					prevParam = false;
+
+				if (!m.isVariadic() && token.identifier("__VA_ARGS__")) {
+					state.problem(new CompileError(token.getFragment(),
+								"__VA_ARGS__ may only occur in the replacement list of a ariadric function macro"));
+				}
+
+				if (token.isHash()) {
+					// a parameter name must follow
+					boolean haveParam = false;
+					for (int j = i+1; j < m.getNumReplacement(); ++j) {
+						Token tmp = m.getReplacement(j);
+						if (m.hasParam(tmp)) {
+							haveParam = true;
+							break;
+						} else if (!tmp.isWS() && !tmp.isNull()) {
+							break;
+						}
+					}
+					if (!haveParam) {
+						state.problem(new CompileError(token.getFragment(),
+									"a parameter name must follow # token"));
+						return false;
+					}
+				} else if (token.isDoubleHash() && !prevParam) {
+					// must have non-whitepsace token before and after the doublehash
+					if (i == 0) {
+						state.problem(new CompileError(token.getFragment(),
+									"## may not be the first token in a macro replacement list"));
+						return false;
+					} else if ((i+1) == m.getNumReplacement()) {
+						state.problem(new CompileError(token.getFragment(),
+									"## may not be the last token in a macro replacement list"));
+						return false;
+					}
+				} else if (m.hasParam(token)) {
+					prevParam = true;
+				} else if (!token.isWS()) {
+					prevParam = false;
+				}
+			}
+			return true;
+		}
+
+		/**
+ 		 * Check that there are no # or ## in the replacement list.
+ 		 * Warn if __VA_ARGS__ appears in the replacement list.
+ 		 */
+		private static boolean checkObjMacroReplacementList(ObjMacro m, PPState state) {
+			for (Token token : m.getReplacementList()) {
+				if (token.identifier("__VA_ARGS__")) {
+					state.problem(new CompileError(token.getFragment(),
+								"__VA_ARGS__ may only occur in the replacement list of a ariadric function macro"));
+				}
+			}
+			return true;
+		}
+
+		public static boolean validateObjMacro(Define d, PPState state) {
+			/**
+ 			 * This is an object-like macro
+ 			 *
+ 			 * 1. need a whitespace between identifier and replacement-list
+ 			 * 2. replacement-list may be empty
+ 			 */
+			Token afterName = d.tokenAfter(0);
+			if (!afterName.isWS() && !afterName.isNull()) {
+				state.problem(new CompileError(afterName.getFragment(),
+							"expected whitespace between macro name and replacement list"));
+				return false;
+			}
+			return true;
+		}
+	}
+
+}

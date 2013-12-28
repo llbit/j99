@@ -1,0 +1,196 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect Rewrites {
+
+	syn Token Token.deRef() = this;
+	eq TokenRef.deRef() = getRef().deRef();
+
+	syn boolean Token.identifier(String name) = false;
+	eq TokenRef.identifier(String name) = getRef().identifier(name);
+	eq Identifier.identifier(String name) = name.equals(getName());
+
+	syn nta NullToken SourceFile.getNullToken() = new NullToken();
+
+	/**
+ 	 * File: PP-spec/Rewrites.jrag
+ 	 *
+ 	 * Out of a list of tokens returns the i:th non-whitespace token.
+ 	 */
+	syn Token Directive.token(List<Token> tokens, int index) {
+		for (int i = 0, j = 0; j < tokens.getNumChild(); ++j) {
+			if (!tokens.getChild(j).isWS()) {
+				if (i == index)
+					return tokens.getChild(j);
+				else
+					++i;
+			}
+		}
+		return root().getNullToken();
+	}
+
+	/**
+ 	 * File: PP-spec/Rewrites.jrag
+ 	 *
+ 	 * Out of a list of tokens returns the one immediately after
+ 	 * the i:th non-whitespace token.
+ 	 */
+	syn Token Directive.tokenAfter(List<Token> tokens, int index) {
+		Token token = token(tokens, index);
+		if (token.isNull())
+			return root().getNullToken();
+
+		int i = tokens.getIndexOfChild(token);
+		if (i+1 >= tokens.getNumChild())
+			return root().getNullToken();
+
+		return tokens.getChild(i+1);
+	}
+
+
+	/**
+ 	 * Returns i:th non-whitespace token.
+ 	 */
+	syn Token Directive.token(int index) = root().getNullToken();
+
+	eq BasicDirective.token(int index) = token(getTokenList(), index);
+
+	/**
+ 	 * File: PP-spec/Rewrites.jrag
+ 	 *
+ 	 * Returns the token immediately after the
+ 	 * i:th non-whitespace token.
+ 	 */
+	syn Token BasicDirective.tokenAfter(int index) =
+		tokenAfter(getTokenList(), index);
+
+	syn List<Token> Directive.arrayToASTList(java.util.List<Token> list) {
+		List<Token> result = new List<Token>();
+		for (Token t : list)
+			result.add(t);
+		return result;
+	}
+
+	public class Util {
+		public static Token tokenRef(Token ref) {
+			return new TokenRef(ref.deRef());
+		}
+
+		/**
+ 	 	 * Trim leading and trailing whitespace from the given token list.
+ 	 	 */
+		public static java.util.List<Token> trimWS(java.util.List<Token> list) {
+			java.util.List<Token> result = new ArrayList<Token>();
+
+			int start = 0;
+			while (start < list.size()) {
+				if (!list.get(start).isWS())
+					break;
+				start++;
+			}
+
+			int end = list.size()-1;
+			while (end > 0) {
+				if (!list.get(end).isWS())
+					break;
+				end--;
+			}
+
+			while (start <= end) {
+				result.add(list.get(start));
+				start++;
+			}
+
+			return result;
+		}
+	}
+
+	/**
+ 	 * Returns a list of all tokens after the first non-whitespace
+ 	 * token in the current directive. Trims leading and trailing
+ 	 * whitespace tokens from the result token list.
+ 	 */
+	syn List<Token> Directive.tailTokens() = new List<Token>();
+
+	eq BasicDirective.tailTokens() {
+		int start = 0;
+		for (start = 0; start < getNumToken(); ++start) {
+			if (!getToken(start).isWS())
+				break;
+		}
+
+		java.util.List<Token> list = new ArrayList<Token>();
+		for (int i = start+1; i < getNumToken(); ++i)
+			list.add(new TokenRef(getToken(i)));
+
+		return arrayToASTList(Util.trimWS(list));
+	}
+
+	rewrite AnyDirective {
+		when (isNonDirective())
+		to NonDirective {
+			NonDirective dir = new NonDirective(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isInclude())
+		to Include {
+			Include dir = new Include(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isDefine())
+		to Define {
+			Define dir = new Define(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isUndef())
+		to Undef {
+			Undef dir = new Undef(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isSourceLine())
+		to SourceLine {
+			SourceLine dir = new SourceLine(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isErrorDirective())
+		to ErrorDirective {
+			ErrorDirective dir = new ErrorDirective(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+
+		when (isPragma())
+		to Pragma {
+			Pragma dir = new Pragma(tailTokens());
+			dir.setFragment(getFragment());
+			return dir;
+		}
+	}
+
+}

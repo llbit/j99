@@ -1,0 +1,492 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect Expansion {
+
+	inh SourceFile ASTNode.root();
+	eq SourceFile.getChild(int i).root() = this;
+
+	/**
+ 	 * Interface for the preprocessing visitor.
+ 	 */
+	public interface Visitor {
+		public void visit(AnyDirective d);
+		public void visit(NonDirective d);
+		public void visit(EmptyLine d);
+		public void visit(TextLine d);
+		public void visit(Pragma d);
+		public void visit(ErrorDirective d);
+		public void visit(Define d);
+		public void visit(Undef d);
+		public void visit(Include d);
+		public void visit(ConditionalDirective d);
+
+		public boolean evalCond(Cond c);
+		public boolean evalCond(IfCond c);
+		public boolean evalCond(IfDefCond c);
+		public boolean evalCond(IfNDefCond c);
+	}
+
+	public void ASTNode.accept(Visitor visitor) {
+		throw new RuntimeException(getClass().getName()+".accept(Visitor) not implemented");
+	}
+	public void SourceFile.accept(Visitor visitor) {
+		for (Directive directive : getDirectiveList())
+			directive.accept(visitor);
+	}
+	public void Block.accept(Visitor visitor) {
+		for (Directive directive : getDirectiveList())
+			directive.accept(visitor);
+	}
+	public void AnyDirective.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void NonDirective.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void EmptyLine.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void TextLine.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void Pragma.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void ErrorDirective.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void Define.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void Include.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void ConditionalDirective.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+	public void Undef.accept(Visitor visitor) {
+		visitor.visit(this);
+	}
+
+	public boolean Cond.eval(Visitor visitor) {
+		return visitor.evalCond(this);
+	}
+	public boolean IfCond.eval(Visitor visitor) {
+		return visitor.evalCond(this);
+	}
+	public boolean IfDefCond.eval(Visitor visitor) {
+		return visitor.evalCond(this);
+	}
+	public boolean IfNDefCond.eval(Visitor visitor) {
+		return visitor.evalCond(this);
+	}
+
+	/**
+ 	 * This class represents the state of the J99 Preprocessor.
+ 	 * The state is a set of data structures containing the currently defined
+ 	 * macros and set of result fragments.
+ 	 */
+	public class PPState {
+		protected Map<Token, Macro> def = new HashMap<Token, Macro>();
+		protected Set<Token> undef = new HashSet<Token>();
+		protected Collection<Fragment> out = new ArrayList<Fragment>();
+		protected Collection<CompileProblem> problems = new ArrayList<CompileProblem>();
+		protected java.util.List<String> includeDirs;
+
+		public void setProblemCollection(Collection<CompileProblem> problems) {
+			this.problems = problems;
+		}
+
+		public void setIncludeDirs(java.util.List<String> includeDirs) {
+			this.includeDirs = includeDirs;
+		}
+
+		public java.util.List<String> getIncludeDirs() {
+			return includeDirs;
+		}
+
+		/**
+ 		 * Adds the given fragment to the output.
+ 		 */
+		public void output(Fragment fragment) {
+			out.add(fragment);
+		}
+
+		/**
+ 		 * Defines the given macro.
+ 		 */
+		public void define(Token key, Macro macro) {
+			def.put(key, macro);
+		}
+
+		/**
+ 		 * Returns true if the given identifier is defined as a macro.
+ 		 */
+		public boolean isMacro(Token key) {
+			return def.containsKey(key) && !undef.contains(key);
+		}
+
+		/**
+ 		 * This only checks if the identifier has been defined as a macro at all
+ 		 * and ignores possible replacement shadowing (undef).
+ 		 */
+		public boolean isDefined(Token key) {
+			return def.containsKey(key);
+		}
+
+		/**
+ 		 * Returns the macro associated with the specified identifier.
+ 		 */
+		public Macro getMacro(Token key) {
+			return def.get(key);
+		}
+
+		/**
+ 		 * Undefine the macro with the given name.
+ 		 */
+		public void undefine(Token key) {
+			def.remove(key);
+		}
+
+		public void problem(CompileProblem problem) {
+			problems.add(problem);
+		}
+		
+		public void problems(Collection<CompileProblem> problemCollection) {
+			problems.addAll(problemCollection);
+		}
+
+		public Collection<CompileProblem> problems() {
+			return problems;
+		}
+		
+		public Collection<Fragment> getResult() {
+			return out;
+		}
+
+		public void setResult(Collection<Fragment> out) {
+			this.out = out;
+		}
+	}
+
+	/**
+ 	 * We use the visitor pattern for preprocessing since preprocessing
+ 	 * requires a lot of state information. The state information is
+ 	 * conveniently stored in the visitor.
+ 	 */
+	public class PPVisitor implements Visitor {
+
+		private PPState state = new PPState();
+		private String basePath;
+
+		public PPVisitor(PPState ppState, String basePath) {
+			this.state = ppState;
+			this.basePath = basePath;
+		}
+
+		public Collection<Fragment> getResult() {
+			return state.getResult();
+		}
+
+		public void visit(AnyDirective d) {
+			state.problem(new CompileError(d.getFragment(),
+						"unknown preprocessor directive: "+d.token(0).toString()));
+		}
+
+		public void visit(NonDirective d) {
+			state.output(new NullFragment());
+		}
+
+		public void visit(EmptyLine d) {
+			state.output(new CharFragment('\n'));
+		}
+
+		public void visit(Pragma d) {
+			// TODO handle STDC pragmas!
+			// just pass pragmas untouched to output
+			state.output(d.getFragment());
+			state.output(new CharFragment('\n'));
+		}
+
+		public void visit(ErrorDirective d) {
+			StringBuffer msg = new StringBuffer(80);
+			for (Token token : d.getTokenList()) {
+				msg.append(token.toString());
+			}
+			state.problem(new CompileError(
+				new FragmentMarker(d.getFragment()), msg.toString()));
+		}
+
+		public void visit(Define d) {
+			if (Validator.validate(d, state) &&
+					!state.isDefined(d.token(0))) {
+				state.define(
+					Util.tokenRef(d.token(0)),// name
+					d.getMacro()); // macro
+			}
+		}
+
+		/**
+ 		 * Include is processed in two steps.
+ 		 * First the preprocessing tokens after the #include are macro expanded.
+ 		 * Second, the file name indicated by the remaining preprocessor tokens is loaded
+ 		 * and preprocessed. The tokens resulting from preprocessing the included file are
+ 		 * used to replace the include macro.
+ 		 */
+		public void visit(Include d) {
+			List<Token> expanded = expand(d);
+			StringBuffer buf = new StringBuffer(80);
+			boolean local = false;
+			final int START = 0;
+			final int PART = 1;
+			int curr = START;
+
+			// TODO: error checks
+			for (Token token : expanded) {
+				if (curr == START) {
+					if (token.isStringLit()) {
+						buf.append(token.stringValue());
+						local = true;
+						break;
+					} else if (token.isLess()) {
+						curr = PART;
+						continue;
+					}
+				} else if (curr == PART) {
+					if (token.isGreater()) {
+						break;
+					} else {
+						buf.append(token.toString());
+						continue;
+					}
+				}
+			}
+			String fn = buf.toString();
+			if (local) {
+				if (!tryInclude(basePath+System.getProperty("file.separator")+fn, d.getFragment()))
+					state.problem(new CompileError(new FragmentMarker(d.getFragment()),
+								"could not find include file \""+fn+"\""));
+			} else {
+				boolean done = false;
+				for (String includeDir : state.getIncludeDirs()) {
+					if (tryInclude(includeDir+System.getProperty("file.separator")+fn, d.getFragment())) {
+						done = true;
+						break;
+					}
+				}
+				if (!done)
+					state.problem(new CompileError(new FragmentMarker(d.getFragment()),
+								"could not find include file \""+fn+"\""));
+			}
+		}
+
+		private boolean tryInclude(String filename, Fragment sourceFragment) {
+			try {
+				File file = new File(filename);
+				FileInputStream in = new FileInputStream(file);
+				ArrayList<CompileProblem> problems = new ArrayList<CompileProblem>();
+				Fragmenter fragmenter = new CommentFragmenter(
+						new LineSplicer(
+							new TrigraphReplacer(
+								new LineFragmenter(filename, in))), problems);
+
+				Collection<Fragment> tmpOut = new ArrayList<Fragment>();
+				Collection<Fragment> oldOut = state.getResult();
+				state.setResult(tmpOut);
+
+				Identifier name = new Identifier("__FILE__");
+				StringLit fnLit = new StringLit("\""+filename+"\"");
+				name.setToken(new se.llbit.j99.parser.Symbol(
+							new LineFragment("@j99", 0, 0, "__FILE__")));
+				fnLit.setToken(new se.llbit.j99.parser.Symbol(
+							new LineFragment("@j99", 0, 0, "\""+filename+"\"")));
+				Macro fileMacro = new ObjMacro(name, new List<Token>().add(fnLit));// TODO: this needs to be attached to the root tree
+				Macro of = state.getMacro(name);
+				state.define(name, fileMacro);
+
+				DirectiveParser parser = new DirectiveParser(fragmenter, state);
+				SourceFile root = parser.parse();
+				PPVisitor visitor = new PPVisitor(state, file.getParentFile().getPath());
+				root.accept(visitor);
+
+				state.define(name, of);
+
+				state.setResult(oldOut);
+				state.output(new ReplacedFragment(sourceFragment,
+							FragmentReader.compose(tmpOut)));
+			} catch (FileNotFoundException e) {
+				return false;
+			} catch (IOException e) {
+				// this should not happen
+				// TODO: do something clever if it does happen
+				//e.printStackTrace();
+				return false;
+			} catch (RuntimeException e) {
+				System.err.println("fatal exception while processing "+filename);
+				throw e;
+			}
+			return true;
+		}
+
+		public void visit(ConditionalDirective d) {
+			//System.out.println("conditional directive: "+d.toString());
+			if (d.getCond().eval(this)) {
+				d.getBlock().accept(this);
+			} else {
+				for (ElsePart ep : d.getElsePartList()) {
+					if (ep.getCond().eval(this)) {
+						ep.getBlock().accept(this);
+						return;
+					}
+				}
+			}
+		}
+		
+		/**
+ 		 * Remove the macro from the set of macros.
+ 		 * TODO: error checks - can only undefine something that is valid identifier
+ 		 * TODO: check for too few or too many tokens in this directive
+ 		 */
+		public void visit(Undef d) {
+			// we do not complain if the undef attempts to undefine
+			// something which was not previously defined
+			state.undefine(d.token(0));
+		}
+
+		/**
+ 		 * Simply output the text line as is.
+ 		 */
+		public void visit(TextLine d) {
+			List<Token> expanded = expand(d);
+			Collection<Fragment> parts = new LinkedList<Fragment>();
+			for (Token token : expanded) {
+				parts.add(token.getFragment());
+			}
+			parts.add(new CharFragment('\n'));
+			state.output(new CompositeFragment(parts));
+		}
+
+		/**
+ 		 * Evaluate the condition, returning true if the block following this
+ 		 * conditional directive should be passed through for macro expansion.
+ 		 */
+		public boolean evalCond(Cond c) {
+			// conditions are true by default -- the only condition
+			// not explicitly defined is the else condition, which should
+			// always be true
+			return true;
+		}
+
+		/**
+ 		 * The If condition is the most complex preprocessing directive
+ 		 * to process. We need to involve the full C99 parser to parse
+ 		 * the expression and then evaluate said expression without having
+ 		 * a source tree to root it in.
+ 		 */
+		public boolean evalCond(IfCond c) {
+			//System.out.println("if directive: "+c.toString());
+
+			// Expand the expression
+			replaceDefined(c);
+			List<Token> expanded = expand(c);
+			Fragment fragment = expandFragment(expanded);
+
+			// TODO evaluate the fragment as a constant expression
+			//System.out.println("fragment: "+fragment.toString());
+			ArrayList<CompileProblem> problems = new ArrayList<CompileProblem>();
+			return fragment.toString().equals("1");
+		}
+
+		private Fragment expandFragment(List<Token> tokens) {
+			Collection<Fragment> parts = new ArrayList<Fragment>();
+			for (Token token : tokens)
+				parts.add(token.expressionFragment(state));
+
+			return new CompositeFragment(parts);
+		}
+
+		/**
+ 		 * Here we handle the defined operator.
+ 		 */
+		private void replaceDefined(IfCond c) {
+			for (int i = 0; i < c.getNumToken(); ++i) {
+				if (c.getToken(i).identifier("defined")) {
+
+					c.getTokenList().removeChild(i);
+
+					// TODO: Add error checks
+					int levels = 0;
+					Token id = c.root().getNullToken();
+
+					while (i < c.getNumToken()) {
+						Token token = c.getToken(i);
+						c.getTokenList().removeChild(i);
+						if (token.isIdentifier()) {
+							id = token;
+							if (levels == 0)
+								break;
+						} else if (token.isLParen()) {
+							levels++;
+						} else if (token.isRParen()) {
+							levels--;
+							if (levels == 0)
+								break;
+						}
+					}
+					Token result;
+					if (state.isDefined(id)) {
+						result = new PPNumber("1");
+						Fragment frag = new CharFragment('1');
+						result.setFragment(frag);
+					} else {
+						result = new PPNumber("0");
+						Fragment frag = new CharFragment('0');
+						result.setFragment(frag);
+					}
+					c.getTokenList().insertChild(result, i);
+				}
+			}
+		}
+
+		public boolean evalCond(IfDefCond c) {
+			// TODO: check that there is only one non-ws token in token list
+			//System.out.println("ifdef directive: "+c.toString());
+			return state.isDefined(c.token(0));
+		}
+
+		public boolean evalCond(IfNDefCond c) {
+			// TODO: check that there is only one non-ws token in token list
+			//System.out.println("ifndef directive: "+c.toString());
+			//System.out.println("value: "+(!state.isDefined(c.token(0))));
+			return !state.isDefined(c.token(0));
+		}
+
+		/**
+ 	 	 * Expand the tokens in the given BasicDirective.
+ 	 	 */
+		private List<Token> expand(BasicDirective d) {
+			PPExpander expander = new PPExpander(d.getTokenList().getStdList(), state);
+			return new List<Token>().addAll(expander.expand());
+		}
+
+	}
+
+}
+

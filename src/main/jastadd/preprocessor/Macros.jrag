@@ -1,0 +1,115 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect Macros {
+
+	/**
+ 	 * If the macro is a function macro with variable argument list.
+ 	 */
+	syn boolean Macro.isVariadic() = false;
+	eq FuncMacro.isVariadic() = getVariadic();
+
+	/**
+ 	 * Check if this macro has a parameter with the same name as the given token.
+ 	 */
+	syn boolean FuncMacro.hasParam(Token name) {
+		if (isVariadic() && name.identifier("__VA_ARGS__"))
+			return true;
+		for (Token param : getParamList()) {
+			if (name.equals(param))
+				return true;
+		}
+		return false;
+	}
+
+	/**
+ 	 * Returns the index of a parameter in the parameter list.
+ 	 */
+	syn int FuncMacro.indexOfParam(Token name) {
+		int i;
+		for (i = 0; i < getNumParam(); ++i) {
+			if (name.equals(getParam(i)))
+				return i;
+		}
+		throw new RuntimeException("macro has no parameter with the given name");
+	}
+
+	syn nta Macro Define.getMacro() =
+		isFuncMacro() ? freshFuncMacro() : freshObjMacro();
+	
+	syn FuncMacro Define.freshFuncMacro() {
+		Token name = new TokenRef(token(0));
+		List<Token> params = new List<Token>();
+		List<Token> repl = new List<Token>();
+		List<Token> tail = tailTokens();
+		boolean isVariadic = false;
+
+		int end = 0;
+		// parameter list
+		for (; end < tail.getNumChild(); ++end) {
+			Token tok = tail.getChild(end);
+			if (tok.isRParen())
+				break;
+			else if (tok.isIdentifier())
+				params.add(new TokenRef(tok));
+			else if (tok.isEllipsis()) {
+				params.add(new Identifier("__VA_ARGS__"));
+				isVariadic = true;
+			}
+		}
+
+		// skip whitespace between parameter list and replacement-list
+		for (end = end+1; end < tail.getNumChild(); ++end) {
+			if (!tail.getChild(end).isWS())
+				break;
+		}
+
+		// replacement-list
+		for (; end < tail.getNumChild(); ++end) {
+			repl.add(new TokenRef(tail.getChild(end)));
+		}
+
+		// NB: replacement list will have no leading or trailing whitespace
+		// NB: if the macro is variadic the last parameter will be __VA_ARGS__
+		return new FuncMacro(name, params, repl, isVariadic);
+	}
+
+	syn ObjMacro Define.freshObjMacro() {
+		Token name = new TokenRef(token(0));
+		List<Token> repl = tailTokens();
+		return new ObjMacro(name, repl);
+	}
+
+	syn boolean Identifier.equals(Object other) {
+		if (other instanceof TokenRef)
+			return ((TokenRef) other).equals(this);
+		if (other instanceof Identifier)
+			return ((Identifier) other).equals(this);
+		return false;
+	}
+
+	syn boolean Identifier.equals(Identifier other) = getName().equals(other.getName());
+
+	syn boolean TokenRef.equals(Object other) = getRef().equals(other);
+
+	syn int Identifier.hashCode() = getName().hashCode();
+
+	syn int TokenRef.hashCode() = getRef().hashCode();
+
+}

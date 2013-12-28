@@ -1,0 +1,115 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+SourceFile ::= Directive*;
+
+abstract Directive;
+abstract BasicDirective : Directive ::= Token*;
+TokenDirective : BasicDirective ::= Token*;
+AnyDirective : BasicDirective ::= Token*;
+TextLine : BasicDirective ::= Token*;
+EmptyLine : Directive;
+NonDirective : BasicDirective ::= Token*;
+
+abstract NamedDirective : BasicDirective ::= Token*;
+Include : NamedDirective;
+Define : NamedDirective;
+Undef : NamedDirective;
+SourceLine : NamedDirective;
+ErrorDirective : NamedDirective;
+Pragma : NamedDirective;
+
+Block ::= Directive*;
+ConditionalDirective : Directive ::= Cond Block ElsePart* EndIf:Directive;
+abstract Cond : BasicDirective;
+IfCond : Cond;
+IfDefCond : Cond;
+IfNDefCond : Cond;
+ElseCond : Cond;
+ElsePart : Directive ::= Cond Block;
+
+abstract Macro : Directive ::= Name:Token;
+ObjMacro : Macro ::= Replacement:Token*;
+FuncMacro : Macro ::= Param:Token* Replacement:Token* <Variadic:Boolean>;
+
+abstract Token;
+NullToken : Token;
+TokenRef : Token ::= <Ref:Token>;
+ReplToken : Token ::= Source:Token Replacement:Token*;
+SubstToken : Token ::= Source:Token* Replacement:Token*;
+OtherChar : Token ::= <Value:String>;
+Whitespace : Token ::= <Value:String>;
+Identifier : Token ::= <Name:String>;
+PPNumber : Token ::= <Value:String>;
+StringLit : Token ::= <Value:String>;
+WideStringLit : StringLit;
+CharConst : Token ::= <Value:String>;
+WideCharConst : CharConst;
+Placeholder : Token;
+
+abstract Punctuator : Token;
+LBracket : Punctuator;
+RBracket : Punctuator;
+LParen : Punctuator;
+RParen : Punctuator;
+LBrace : Punctuator;
+RBrace : Punctuator;
+Dot : Punctuator;
+Arrow : Punctuator;
+DoublePlus : Punctuator;
+DoubleMinus : Punctuator;
+And : Punctuator;
+Asterisk : Punctuator;
+Plus : Punctuator;
+Minus : Punctuator;
+Tilde : Punctuator;
+Exclamation : Punctuator;
+Slash : Punctuator;
+Percent : Punctuator;
+DoubleLess : Punctuator;
+DoubleGreater : Punctuator;
+Less : Punctuator;
+Greater : Punctuator;
+LessEqual : Punctuator;
+GreaterEqual : Punctuator;
+DoubleEqual : Punctuator;
+ExclamationEqual : Punctuator;
+Caret : Punctuator;
+Pipe : Punctuator;
+DoubleAnd : Punctuator;
+DoublePipe : Punctuator;
+Question : Punctuator;
+Colon : Punctuator;
+Semicolon : Punctuator;
+Ellipsis : Punctuator;
+Equal : Punctuator;
+AsteriskEqual : Punctuator;
+SlashEqual : Punctuator;
+PercentEqual : Punctuator;
+PlusEqual : Punctuator;
+MinusEqual : Punctuator;
+DoubleLessEqual : Punctuator;
+DoubleGreaterEqual : Punctuator;
+AndEqual : Punctuator;
+CaretEqual : Punctuator;
+PipeEqual : Punctuator;
+Comma : Punctuator;
+Hash : Punctuator;
+DoubleHash : Punctuator;
+

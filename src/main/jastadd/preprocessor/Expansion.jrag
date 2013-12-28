@@ -1,0 +1,343 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect Expansion {
+
+	public class PPExpander {
+		int index;
+		java.util.List<Token> tokens;
+		PPState state;
+
+		public PPExpander(java.util.List<Token> tokens, PPState state) {
+			this.tokens = tokens;
+			this.state = state;
+		}
+
+		private boolean notEmpty() {
+			return index < tokens.size();
+		}
+
+		private int pos() {
+			return index;
+		}
+
+		private void rewind(int pos) {
+			index = pos;
+		}
+
+		private Token peek() {
+			return tokens.get(index);
+		}
+
+		private Token pop() {
+			return tokens.get(index++);
+		}
+
+		public java.util.List<Token> expand() {
+			LinkedList<Token> expanded = new LinkedList<Token>();
+			while (notEmpty())
+				expanded.add(expandToken());
+			return expanded;
+		}
+
+		private Token expandToken() {
+			Token name = peek();
+			if (state.isMacro(name)) {
+				if (state.getMacro(name).isObjMacro()) {
+					return expandObjMacro();
+				} else {
+					return expandFuncMacro();
+				}
+			} else {
+				return Util.tokenRef(pop());
+			}
+		}
+
+		private Token expandObjMacro() {
+			Token name = pop();
+			ObjMacro m = (ObjMacro) state.getMacro(name);
+			java.util.List<Token> repl = m.getReplacementList().getStdList();
+			repl = tokenConcatenation(repl);
+			PPExpander expander = new PPExpander(repl, state);
+			java.util.List<Token> expanded = expander.expand();
+			return new ReplToken(Util.tokenRef(name),
+					new List<Token>().addAll(expanded));
+		}
+
+		/**
+ 		 * Function-like macro expansion is done in three steps:
+ 		 *
+ 		 * 1. Parameter expansion.
+ 		 * 2. Token concatenation.
+ 		 * 3. Replacement expansion.
+ 		 */
+		private Token expandFuncMacro() {
+			// TODO: Do not allow empty variadic argument list
+			java.util.List<Token> srcTokens = new LinkedList<Token>();
+			Token name = pop();
+			int initial = pos();
+			FuncMacro m = (FuncMacro) state.getMacro(name);
+
+			java.util.List<java.util.List<Token>> params = new ArrayList<java.util.List<Token>>();
+			ArrayList<Token> param = new ArrayList<Token>();
+			boolean opened = false;
+			boolean complete = false;
+
+			// matching parenthesis may be present as parameters to the function macro
+			int parDepth = 0;
+
+			srcTokens.add(Util.tokenRef(name));
+
+			// collect parameters
+			while (notEmpty()) {
+				Token token = pop();
+				srcTokens.add(Util.tokenRef(token));
+				if (!opened) {
+					if (token.isLParen()) {
+						opened = true;
+					} else if (token.isRParen()) {
+						// ABORT
+						break;
+					} else if (!token.isWS()) {
+						// ERROR
+						state.problem(new CompileError(token.getFragment(),
+									"unexpected token in function macro parameter list"));
+						break;
+					}
+				} else {
+					if (token.isLParen()) {
+						parDepth++;
+						param.add(token);
+					} else if (token.isRParen()) {
+						if (parDepth == 0) {
+							java.util.List<Token> trimmed = Util.trimWS(param);
+							if (trimmed.isEmpty())
+								trimmed.add(new Placeholder());
+							params.add(trimmed);
+							complete = true;
+							break;
+						} else {
+							parDepth--;
+							param.add(token);
+						}
+					} else if (token.isComma() && parDepth == 0 &&
+							!(m.isVariadic() && (params.size()+1) == m.getNumParam())) {
+						java.util.List<Token> trimmed = Util.trimWS(param);
+						if (trimmed.isEmpty())
+							trimmed.add(new Placeholder());
+						params.add(trimmed);
+						param = new ArrayList<Token>();
+					} else {
+						param.add(token);
+					}
+				}
+			}
+
+			if (complete) {
+				try {
+					return funcMacroSubst(name, srcTokens, params);
+				} catch (PPExpAbort abort) {
+					// ABORT
+				}
+			} else {
+				if (opened) {
+					// ERROR
+					state.problem(new CompileError(name.getFragment(),
+								"missing ')' in function macro invocation"));
+				} else {
+					// ABORT
+				}
+			}
+			rewind(initial);
+			return Util.tokenRef(name);
+
+		}
+
+		private class PPExpAbort extends Exception {}
+
+		private Token funcMacroSubst(Token name,
+				java.util.List<Token> source,
+				java.util.List<java.util.List<Token>> params)
+			throws PPExpAbort
+		{
+			FuncMacro m = (FuncMacro) state.getMacro(name);
+
+			if (!m.isVariadic() && params.size() != m.getNumParam()) {
+				state.problem(new CompileError(name.getFragment(),
+							"wrong number of parameters passed to func macro"+
+							" (passed "+params.size()+", expected "+m.getNumParam()+")"));
+				throw new PPExpAbort();
+			} else if (m.isVariadic() && params.size() < m.getNumParam()) {
+				if (params.size()+1 == m.getNumParam()) {
+					state.problem(new CompileError(name.getFragment(),
+								"variadic function macros do not accept empty variadic argument"));
+				} else {
+					state.problem(new CompileError(name.getFragment(),
+								"too few parameters passed to variadic function macro"+
+								" (passed "+params.size()+", expected at least "+m.getNumParam()+")"));
+				}
+				throw new PPExpAbort();
+			}
+
+			boolean prevHash = false;
+			java.util.List<Token> repl = new ArrayList<Token>();
+			for (int i = 0; i < m.getNumReplacement(); ++i) {
+				Token token = m.getReplacement(i);
+				if (token.isHash()) {
+					prevHash = true;
+				} else if (token.isWS()) {
+					repl.add(Util.tokenRef(token));
+				} else if (m.hasParam(token)) {
+					int index = m.indexOfParam(token);
+					java.util.List<Token> param = params.get(index);
+
+					if (prevHash) {
+						StringBuffer buf = new StringBuffer(80);
+						Collection<Fragment> parts = new LinkedList<Fragment>();
+						buf.append('"');// TODO: set source fragment
+						parts.add(new CharFragment('"'));
+						PPExpander expander = new PPExpander(params.get(index), state);
+						java.util.List<Token> expanded = expander.expand();
+						for (Token token_ : expanded) {
+							buf.append(token_.toString());
+							parts.add(token_.getFragment());
+						}
+						buf.append('"');
+						parts.add(new CharFragment('"'));
+						StringLit lit = new StringLit(buf.toString());
+						CompositeFragment frag = new CompositeFragment(parts);
+						lit.setFragment(frag);
+						repl.add(lit);
+						prevHash = false;
+					} else {
+						PPExpander expander = new PPExpander(params.get(index), state);
+						java.util.List<Token> expanded = expander.expand();
+						repl.addAll(expanded);
+					}
+				} else {
+					repl.add(Util.tokenRef(token));
+				}
+			}
+
+			repl = tokenConcatenation(repl);
+
+			// Final macro expansion step
+			PPExpander expander = new PPExpander(repl, state);
+			java.util.List<Token> expanded = expander.expand();
+			return new SubstToken(new List<Token>().addAll(source),
+					new List<Token>().addAll(expanded));
+		}
+
+		private java.util.List<Token> tokenConcatenation(java.util.List<Token> repl) {
+			java.util.List<Token> res = new LinkedList<Token>();
+			int last = 0;
+			int i = 0;
+			for (; i < repl.size(); ++i) {
+				Token token = repl.get(i);
+				if (token.isWS()) {
+					continue;
+				} else if (token.isDoubleHash()) {
+					Token lastToken = repl.get(last);
+					int j = i+1;
+					for (; j < repl.size(); ++j) {
+						if (!repl.get(j).isWS())
+							break;
+					}
+					Token nextToken = repl.get(j);
+					res.add(concatenate(lastToken, nextToken));
+					i = j+1;
+					last = i;
+					if (!(i < repl.size()))
+						break;
+				} else {
+					for (; last < i; ++last)
+						res.add(repl.get(last));
+				}
+			}
+			for (; last < i; ++last)
+				res.add(repl.get(last));
+			return res;
+		}
+
+		/**
+ 		 * Concatenate two tokens.
+ 		 *
+ 		 * 1. Two placeholder tokens form a new placeholder token.
+ 		 * 2. A placeholder token A and a regular token B result in A.
+ 		 * 3. Two regular tokens need to be parsed to form a new token.
+ 		 * 	If the new token is not a valid preprocessor token this
+ 		 * 	is undefined behavior.
+ 		 */
+		private Token concatenate(Token a, Token b) {
+			if (a.isPlaceholder())
+				return b;
+			if (b.isPlaceholder())
+				return a;
+
+			Collection<Fragment> parts = new LinkedList<Fragment>();
+			parts.add(a.getFragment());
+			parts.add(b.getFragment());
+			CompositeFragment f = new CompositeFragment(parts);
+			Collection<CompileProblem> problems = new LinkedList<CompileProblem>();
+			try {
+
+				LineParser parser = new LineParser(state);
+				return parser.parseToken(f);
+
+			} catch (IOException e) {
+				/*
+ 			 	 * This should not happen since we are using a
+ 			 	 * FragmentReader, which should never throw an IOException
+ 			 	 * if used correctly.
+ 			 	 */
+				throw new RuntimeException("should not come here");
+			}
+		}
+	}
+
+	syn Fragment Token.expressionFragment(PPState ppState) = getFragment();
+	eq Identifier.expressionFragment(PPState ppState) {
+		/*ppState.problem(new CompileWarning(getFragment(),
+					"identifiers are replaced by '0' in conditional inclusion controlling expressions"));*/
+		return new ReplacedFragment(getFragment(), new CharFragment('0', getFragment()));
+	}
+	eq TokenRef.expressionFragment(PPState ppState) =
+		getRef().expressionFragment(ppState);
+	eq SubstToken.expressionFragment(PPState ppState) {
+		Collection<Fragment> src = new ArrayList<Fragment>();
+		for (Token tok : getSourceList()) {
+			src.add(tok.getFragment());
+		}
+		Collection<Fragment> repl = new ArrayList<Fragment>();
+		for (Token tok : getReplacementList()) {
+			repl.add(tok.expressionFragment(ppState));
+		}
+		return new ReplacedFragment(new CompositeFragment(src),
+				new CompositeFragment(repl));
+	}
+	eq ReplToken.expressionFragment(PPState ppState) {
+		Collection<Fragment> repl = new ArrayList<Fragment>();
+		for (Token tok : getReplacementList()) {
+			repl.add(tok.expressionFragment(ppState));
+		}
+		return new ReplacedFragment(getSource().getFragment(),
+				new CompositeFragment(repl));
+	}
+
+}

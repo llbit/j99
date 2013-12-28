@@ -1,0 +1,111 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect ToString {
+	syn String Token.stringValue() = "";
+	eq TokenRef.stringValue() = getRef().stringValue();
+	eq StringLit.stringValue() =
+		getValue().substring(1, getValue().length()-1);
+	eq WideStringLit.stringValue() =
+		getValue().substring(2, getValue().length()-1);
+	syn String BasicDirective.toString() {
+		StringBuffer buf = new StringBuffer(80);
+		for (Token tok : getTokenList())
+			buf.append(tok.toString());
+		return buf.toString();
+	}
+
+	syn String Macro.toString() = getName().toString();
+
+	syn String Token.toString();
+	eq NullToken.toString() = "";
+	eq TokenRef.toString() = getRef().toString();
+	eq OtherChar.toString() = getValue();
+	eq Whitespace.toString() = getValue();
+	eq Identifier.toString() = getName();
+	eq PPNumber.toString() = getValue();
+	eq WideStringLit.toString() = "L"+getValue();
+	eq StringLit.toString() = getValue();
+	eq WideCharConst.toString() = "L"+getValue();
+	eq CharConst.toString() = getValue();
+	eq Placeholder.toString() = "";
+	eq ReplToken.toString() {
+		StringBuffer buf = new StringBuffer(64);
+		for (int i = 0; i < getNumReplacement(); ++i) {
+			buf.append(getReplacement(i).toString());
+		}
+		return buf.toString();
+	}
+	eq SubstToken.toString() {
+		StringBuffer buf = new StringBuffer(64);
+		for (int i = 0; i < getNumReplacement(); ++i) {
+			buf.append(getReplacement(i).toString());
+		}
+		return buf.toString();
+	}
+
+	eq LBracket.toString() = "[";
+	eq RBracket.toString() = "]";
+	eq LParen.toString() = "(";
+	eq RParen.toString() = ")";
+	eq LBrace.toString() = "{";
+	eq RBrace.toString() = "}";
+	eq Dot.toString() = ".";
+	eq Arrow.toString() = "->";
+	eq DoublePlus.toString() = "++";
+	eq DoubleMinus.toString() = "--";
+	eq And.toString() = "&";
+	eq Asterisk.toString() = "*";
+	eq Plus.toString() = "+";
+	eq Minus.toString() = "-";
+	eq Tilde.toString() = "~";
+	eq Exclamation.toString() = "!";
+	eq Slash.toString() = "/";
+	eq Percent.toString() = "%";
+	eq DoubleLess.toString() = "<<";
+	eq DoubleGreater.toString() = ">>";
+	eq Less.toString() = "<";
+	eq Greater.toString() = ">";
+	eq LessEqual.toString() = "<=";
+	eq GreaterEqual.toString() = ">=";
+	eq DoubleEqual.toString() = "==";
+	eq ExclamationEqual.toString() = "!=";
+	eq Caret.toString() = "^";
+	eq Pipe.toString() = "|";
+	eq DoubleAnd.toString() = "&&";
+	eq DoublePipe.toString() = "||";
+	eq Question.toString() = "?";
+	eq Colon.toString() = ":";
+	eq Semicolon.toString() = ";";
+	eq Ellipsis.toString() = "...";
+	eq Equal.toString() = "=";
+	eq AsteriskEqual.toString() = "*=";
+	eq SlashEqual.toString() = "/=";
+	eq PercentEqual.toString() = "%=";
+	eq PlusEqual.toString() = "+=";
+	eq MinusEqual.toString() = "-=";
+	eq DoubleLessEqual.toString() = "<<=";
+	eq DoubleGreaterEqual.toString() = ">>=";
+	eq AndEqual.toString() = "&=";
+	eq CaretEqual.toString() = "^=";
+	eq PipeEqual.toString() = "|=";
+	eq Comma.toString() = ",";
+	eq Hash.toString() = "#";
+	eq DoubleHash.toString() = "##";
+}

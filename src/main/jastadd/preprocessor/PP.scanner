@@ -1,0 +1,259 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+package se.llbit.j99.sp;
+
+import se.llbit.j99.parser.Symbol;
+import se.llbit.j99.util.LineParser.Terminals;
+import se.llbit.j99.fragment.*;
+import se.llbit.j99.problem.*;
+
+%%
+
+%public
+%final
+%class PPScanner
+%unicode
+%line
+%column
+
+%type Symbol
+%function nextSymbol
+%yylexthrow CompileError
+
+%{
+	public PPScanner(Fragment fragment) {
+		this(new FragmentReader(fragment));
+		this.fragment = fragment;
+	}
+	
+	Fragment fragment = new NullFragment();// needs to be initialized for line & column info
+	int offset;
+	int start;
+	StringBuffer strbuf = new StringBuffer(80);
+	short kind;
+
+	private Symbol sym(short id) {
+		start = offset;
+		offset += len();
+		return new Symbol(id,
+			fragment, start,
+			len(), str());
+	}
+
+	private Symbol sym(short id, String value) {
+		return new Symbol(id,
+			fragment, start,
+			value.length(), value);
+	}
+
+	private String str() {
+		return yytext();
+	}
+
+	private int len() {
+		return yylength();
+	}
+
+	private void error(String msg) throws CompileError {
+		throw new CompileError(fragment.part(start, offset), msg);
+	}
+%}
+
+EndOfLine = \r | \n | \r\n
+WhiteSpace = [ \t][ \t]*
+
+StrChar = [^\r\n\"]
+CharChar = [^\r\n\']
+
+Identifier = {IdentifierNonDigit}({IdentifierNonDigit}|{Digit})*
+IdentifierNonDigit = [_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ]
+Digit = [0123456789]
+
+/* 6.4.8 Preprocessing numbers */
+PPDigit = {IdentifierNonDigit} | {Digit} | \.
+PPNumber = \.? {Digit} {PPDigit}*{PPNumberSuffix}?
+PPNumberSuffix = e+ | e- | E+ | E- | p+ | p- | P+ | P-
+
+%state STRING_LITERAL
+%state CHARACTER_CONSTANT
+
+%%
+
+<YYINITIAL> {
+  L\" {
+    start = offset;
+    offset += len();
+    strbuf.setLength(0);
+    strbuf.append(str());
+    yybegin(STRING_LITERAL);
+    kind = Terminals.WIDE_STRING_LIT;
+  }
+
+  \" {
+    start = offset;
+    offset += len();
+    strbuf.setLength(0);
+    strbuf.append(str());
+    yybegin(STRING_LITERAL);
+    kind = Terminals.STRING_LIT;
+  }
+
+  L\' {
+    start = offset;
+    offset += len();
+    strbuf.setLength(0);
+    strbuf.append(str());
+    yybegin(CHARACTER_CONSTANT);
+    kind = Terminals.WIDE_CHARACTER_CONST;
+  }
+
+  \' {
+    start = offset;
+    offset += len();
+    strbuf.setLength(0);
+    strbuf.append(str());
+    yybegin(CHARACTER_CONSTANT);
+    kind = Terminals.CHARACTER_CONST;
+  }
+  {WhiteSpace}  { return sym(Terminals.WHITESPACE); }
+  {PPNumber}    { return sym(Terminals.PPNUMBER); }
+  {Identifier}  { return sym(Terminals.IDENTIFIER); }
+}
+
+/* 6.4.4.4 Character constants */
+<CHARACTER_CONSTANT> {
+  \' {
+    offset += len();
+    strbuf.append(str());
+    yybegin(YYINITIAL);
+    return sym(kind, strbuf.toString());
+  }
+
+  {CharChar}+ {
+    offset += len();
+    strbuf.append(str());
+  }
+
+  "\\'" {
+    offset += len();
+    strbuf.append(str());
+  }
+
+  // errors
+  {EndOfLine}   { error("unterminated character constant at end of line"); }
+}
+
+/* 6.4.5 String literals */
+<STRING_LITERAL> {
+   \" {
+    offset += len();
+    strbuf.append(str());
+    yybegin(YYINITIAL);
+    return sym(kind, strbuf.toString());
+  }
+
+  {StrChar}+ {
+    offset += len();
+    strbuf.append(str());
+  }
+
+  "\\\"" {
+    offset += len();
+    strbuf.append(str());
+  }
+
+  // errors
+  {EndOfLine}   { error("unterminated string at end of line"); }
+}
+
+/* 6.4.6 Punctuators */
+<YYINITIAL> {
+  "["   { return sym(Terminals.LBRACKET); }
+  "]"   { return sym(Terminals.RBRACKET); }
+  "("   { return sym(Terminals.LPAREN); }
+  ")"   { return sym(Terminals.RPAREN); }
+  "{"   { return sym(Terminals.LBRACE); }
+  "}"   { return sym(Terminals.RBRACE); }
+  "."   { return sym(Terminals.DOT); }
+  "->"  { return sym(Terminals.ARROW); }
+  "++"  { return sym(Terminals.DOUBLEPLUS); }
+  "--"  { return sym(Terminals.DOUBLEMINUS); }
+  "&"   { return sym(Terminals.AND); }
+  "*"   { return sym(Terminals.ASTERISK); }
+  "+"   { return sym(Terminals.PLUS); }
+  "-"   { return sym(Terminals.MINUS); }
+  "~"   { return sym(Terminals.TILDE); }
+  "!"   { return sym(Terminals.EXCLAMATION); }
+  "/"   { return sym(Terminals.SLASH); }
+  "%"   { return sym(Terminals.PERCENT); }
+  "<<"  { return sym(Terminals.DOUBLELESS); }
+  ">>"  { return sym(Terminals.DOUBLEGREATER); }
+  "<"   { return sym(Terminals.LESS); }
+  ">"   { return sym(Terminals.GREATER); }
+  "<="  { return sym(Terminals.LESSEQUAL); }
+  ">="  { return sym(Terminals.GREATEREQUAL); }
+  "=="  { return sym(Terminals.DOUBLEEQUAL); }
+  "!="  { return sym(Terminals.EXCLAMATIONEQUAL); }
+  "^"   { return sym(Terminals.CARET); }
+  "|"   { return sym(Terminals.PIPE); }
+  "&&"  { return sym(Terminals.DOUBLEAND); }
+  "||"  { return sym(Terminals.DOUBLEPIPE); }
+  "?"   { return sym(Terminals.QUESTION); }
+  ":"   { return sym(Terminals.COLON); }
+  ";"   { return sym(Terminals.SEMICOLON); }
+  "..." { return sym(Terminals.ELLIPSIS); }
+  "="   { return sym(Terminals.EQUAL); }
+  "*="  { return sym(Terminals.ASTERISKEQUAL); }
+  "/="  { return sym(Terminals.SLASHEQUAL); }
+  "%="  { return sym(Terminals.PERCENTEQUAL); }
+  "+="  { return sym(Terminals.PLUSEQUAL); }
+  "-="  { return sym(Terminals.MINUSEQUAL); }
+  "<<=" { return sym(Terminals.DOUBLELESSEQUAL); }
+  ">>=" { return sym(Terminals.DOUBLEGREATEREQUAL); }
+  "&="  { return sym(Terminals.ANDEQUAL); }
+  "^="  { return sym(Terminals.CARETEQUAL); }
+  "|="  { return sym(Terminals.PIPEEQUAL); }
+  ","   { return sym(Terminals.COMMA); }
+  "#"   { return sym(Terminals.HASH); }
+  "##"  { return sym(Terminals.DOUBLEHASH); }
+  "<:"  { return sym(Terminals.LBRACKET); }
+  ":>"  { return sym(Terminals.RBRACKET); }
+  "<%"  { return sym(Terminals.RBRACKET); }
+  "%>"  { return sym(Terminals.RBRACKET); }
+  "%:"  { return sym(Terminals.HASH); }
+  "%:%:" { return sym(Terminals.DOUBLEHASH); }
+}
+
+<YYINITIAL> {
+  .     { return sym(Terminals.OTHER_CHAR); }
+}
+
+<CHARACTER_CONSTANT> <<EOF>> {
+    yybegin(YYINITIAL);
+	error("unterminated character constant at end of file");
+}
+
+<STRING_LITERAL> <<EOF>> {
+	yybegin(YYINITIAL);
+	error("unterminated string at end of file");
+}
+
+<<EOF>> {
+	return sym(Terminals.EOF);
+}

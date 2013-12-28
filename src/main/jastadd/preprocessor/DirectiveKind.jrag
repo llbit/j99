@@ -1,0 +1,77 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect DirectiveKind {
+
+	syn boolean Directive.isConditional() = isIf() || isIfDef() || isIfNDef();
+	syn boolean Directive.isNonDirective() = false;
+	syn boolean Directive.isInclude() = false;
+	syn boolean Directive.isDefine() = false;
+	syn boolean Directive.isIf() = false;
+	syn boolean Directive.isIfDef() = false;
+	syn boolean Directive.isIfNDef() = false;
+	syn boolean Directive.isElse() = false;
+	syn boolean Directive.isElIf() = false;
+	syn boolean Directive.isEndIf() = false;
+	syn boolean Directive.isUndef() = false;
+	syn boolean Directive.isSourceLine() = false;
+	syn boolean Directive.isErrorDirective() = false;
+	syn boolean Directive.isPragma() = false;
+	
+	eq AnyDirective.isNonDirective() = token(0).isNull();
+	eq AnyDirective.isInclude() = token(0).identifier("include");
+	eq AnyDirective.isDefine() = token(0).identifier("define");
+	eq AnyDirective.isIf() = token(0).identifier("if");
+	eq AnyDirective.isIfDef() = token(0).identifier("ifdef");
+	eq AnyDirective.isIfNDef() = token(0).identifier("ifndef");
+	eq AnyDirective.isElse() = token(0).identifier("else");
+	eq AnyDirective.isElIf() = token(0).identifier("elif");
+	eq AnyDirective.isEndIf() = token(0).identifier("endif");
+	eq AnyDirective.isUndef() = token(0).identifier("undef");
+	eq AnyDirective.isSourceLine() = token(0).identifier("line");
+	eq AnyDirective.isErrorDirective() = token(0).identifier("error");
+	eq AnyDirective.isPragma() = token(0).identifier("pragma");
+
+	eq NonDirective.isNonDirective() = true;
+	eq Include.isInclude() = true;
+	eq Define.isDefine() = true;
+	eq Undef.isUndef() = true;
+	eq SourceLine.isSourceLine() = true;
+	eq ErrorDirective.isErrorDirective() = true;
+	eq Pragma.isPragma() = true;
+
+	syn boolean Directive.isTextLine() = false;
+	eq TextLine.isTextLine() = true;
+
+	syn boolean Define.isFuncMacro() = tokenAfter(0).isLParen();
+	syn boolean Define.isObjMacro() = !isFuncMacro();
+
+	syn boolean Macro.isObjMacro() = false;
+	eq ObjMacro.isObjMacro() = true;
+
+	syn boolean Macro.isFuncMacro() = false;
+	eq FuncMacro.isFuncMacro() = true;
+
+	syn List<Token> Macro.repl() {
+		throw new Error(getClass().getName()+" has no replacement-list");
+	}
+	eq ObjMacro.repl() = getReplacementList();
+	eq FuncMacro.repl() = getReplacementList();
+
+}

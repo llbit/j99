@@ -1,0 +1,78 @@
+/*
+ * Copyright 2010 Jesper Öqvist <jesper@llbit.se>
+ *
+ * This file is part of J99.
+ *
+ * J99 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * J99 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with J99.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+aspect TokenKinds {
+	syn boolean Token.isActualToken() = true;
+	eq Whitespace.isActualToken() = false;
+	eq TokenRef.isActualToken() = getRef().isActualToken();
+	eq OtherChar.isActualToken() = false;
+
+	syn boolean Token.isPlaceholder() = false;
+	eq TokenRef.isPlaceholder() = getRef().isPlaceholder();
+	eq Placeholder.isPlaceholder() = true;
+
+	syn boolean Token.isWS() = isWhitespace();
+	syn boolean Token.isWhitespace() = false;
+	eq TokenRef.isWhitespace() = getRef().isWhitespace();
+	eq Whitespace.isWhitespace() = true;
+
+	syn boolean Token.isNull() = false;
+	eq TokenRef.isNull() = getRef().isNull();
+	eq NullToken.isNull() = true;
+
+	syn boolean Token.isIdentifier() = false;
+	eq TokenRef.isIdentifier() = getRef().isIdentifier();
+	eq Identifier.isIdentifier() = true;
+
+	syn boolean Token.isLParen() = false;
+	eq TokenRef.isLParen() = getRef().isLParen();
+	eq LParen.isLParen() = true;
+
+	syn boolean Token.isRParen() = false;
+	eq TokenRef.isRParen() = getRef().isRParen();
+	eq RParen.isRParen() = true;
+
+	syn boolean Token.isComma() = false;
+	eq TokenRef.isComma() = getRef().isComma();
+	eq Comma.isComma() = true;
+
+	syn boolean Token.isGreater() = false;
+	eq TokenRef.isGreater() = getRef().isGreater();
+	eq Greater.isGreater() = true;
+
+	syn boolean Token.isLess() = false;
+	eq TokenRef.isLess() = getRef().isLess();
+	eq Less.isLess() = true;
+
+	syn boolean Token.isStringLit() = false;
+	eq TokenRef.isStringLit() = getRef().isStringLit();
+	eq StringLit.isStringLit() = true;
+
+	syn boolean Token.isHash() = false;
+	eq TokenRef.isHash() = getRef().isHash();
+	eq Hash.isHash() = true;
+
+	syn boolean Token.isDoubleHash() = false;
+	eq TokenRef.isDoubleHash() = getRef().isDoubleHash();
+	eq DoubleHash.isDoubleHash() = true;
+
+	syn boolean Token.isEllipsis() = false;
+	eq TokenRef.isEllipsis() = getRef().isEllipsis();
+	eq Ellipsis.isEllipsis() = true;
+}

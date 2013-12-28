@@ -1,0 +1,1 @@
+tests/macro/assert01/test.c:2:0: could not find include file "assert.h"

@@ -1,0 +1,61 @@
+<project name="j99.core" default="build">
+
+	<property name="gen.dir"		location="src/gen"/>
+	<property name="bin.dir"		location="ant-bin"/>
+	<property name="tools.dir"		location="tools"/>
+	<property name="sp.dir"			location="${gen.dir}/java/se/llbit/j99/sp"/>
+	<property name="pp.package"		value="se.llbit.j99.pp"/>
+
+	<property name="pp.spec.dir"	value="src/main/jastadd/preprocessor"/>
+
+	<taskdef name="jflex" classname="JFlex.anttask.JFlexTask" classpath="${tools.dir}/JFlex.jar"/>
+	<taskdef name="jastadd" classname="jastadd.JastAddTask" classpath="${tools.dir}/jastadd2.jar"/>
+
+	<target name="build" depends="gen">
+		<mkdir dir="${bin.dir}"/>
+		<javac debug="false" nowarn="true" destdir="${bin.dir}"
+			source="1.6"
+			target="1.6"
+			includeantruntime="false">
+			<classpath>
+				<pathelement path="${tools.dir}/junit.jar"/>
+			</classpath>
+			<src path="src/gen/java"/>
+			<src path="src/main/java"/>
+		</javac>
+	</target>
+	
+	<target name="jar" depends="build">
+		<jar destfile="ppj99.jar">
+			<fileset dir="${bin.dir}" includes="**/*.class"/>
+		</jar>
+	</target>
+
+	<target name="clean">
+		<delete dir="${bin.dir}"/>
+		<delete dir="${gen.dir}/java">
+			<include name="**/*.java"/>
+		</delete>
+	</target>
+
+	<target name="gen">
+		<mkdir dir="${gen.dir}/java"/>
+		<mkdir dir="${sp.dir}"/>
+		<jflex
+			file="${pp.spec.dir}/PP.scanner"
+			outdir="${sp.dir}"
+			nobak="yes"/>
+		<jastadd 
+			outdir="${gen.dir}/java"
+			package="${pp.package}"
+			rewrite="true"
+			debug="true">
+			<fileset dir="${pp.spec.dir}">
+				<include name="*.ast"/>
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
+			</fileset>
+		</jastadd>
+	</target>
+
+</project>

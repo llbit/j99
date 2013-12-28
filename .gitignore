@@ -1,0 +1,9 @@
+/src/gen/java
+
+/bin
+/ant-bin
+
+/ppj99.jar
+
+# vim
+*.swp
