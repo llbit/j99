@@ -85,8 +85,8 @@ public class TestPP {
 
 		String expectedOut = readFileToString(new File(TEST_ROOT + test, "out.expected"));
 		String expectedErr = readFileToString(new File(TEST_ROOT + test, "err.expected"));
-		assertEquals("output mismatch", expectedOut, stdout);
 		assertEquals("error message mismatch", expectedErr.trim(), stderr.trim());
+		assertEquals("output mismatch", expectedOut, stdout);
 	}
 
 	/**
