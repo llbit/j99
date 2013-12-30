@@ -1,8 +1,10 @@
-PP/J99
-======
+J99
+===
 
-Incomplete preprocessor for C99.
+This is an incomplete preprocessor for C99. Conditional inclusion is currently
+known to not work according to the C99 specs. Other stuff is likely also not
+working according to the spec.
 
-Copyright (c) 2010-2013 Jesper &Ouml;qvist &lt;jesper&et;llbt.se&gt;
+Copyright (c) 2010-2013 Jesper &Ouml;qvist &lt;jesper&amp;llbt.se&gt;
 
-GPL v3 licensed.
+GPL v3 licensed. See `license.txt` for full license text.
