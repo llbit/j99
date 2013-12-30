@@ -18,6 +18,11 @@
  */
 package se.llbit.j99.util;
 
+import java.io.IOException;
+import java.util.Collection;
+import java.util.LinkedList;
+import java.util.Stack;
+
 import se.llbit.j99.fragment.CharFragment;
 import se.llbit.j99.fragment.Fragment;
 import se.llbit.j99.fragment.Fragmenter;
@@ -45,17 +50,16 @@ import se.llbit.j99.pp.Whitespace;
 import se.llbit.j99.problem.CompileError;
 import se.llbit.j99.problem.FragmentMarker;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.Stack;
-
+/**
+ * Parses perprocessor directives.
+ * @author Jesper Öqvist <jesper@llbit.se>
+ */
 public class DirectiveParser {
 
 	Stack<Directive> queue = new Stack<Directive>();
 	Fragmenter in;
 	PPState state;
-	private LineParser parser;
+	private final LineParser parser;
 	private int lineNum=1;
 
 	public DirectiveParser(Fragmenter in, PPState state) {
@@ -79,7 +83,7 @@ public class DirectiveParser {
 			return false;
 		}
 	}
-	
+
 	private Directive pop() {
 		if (queue.isEmpty()) {
 			try {
@@ -180,12 +184,12 @@ public class DirectiveParser {
 	private Directive parseIf() {
 		Directive cond = pop();
 		Block thenBlock = new Block();
-		
+
 		Cond elseCond = null;// silence Java warning
 		Block elseBlock = null;// silence Java warning
-		
+
 		List<ElsePart> elseParts = new List<ElsePart>();
-		
+
 		boolean elsePart = false;
 
 		while (notEmpty()) {

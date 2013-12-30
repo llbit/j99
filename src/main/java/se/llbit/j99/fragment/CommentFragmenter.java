@@ -18,18 +18,18 @@
  */
 package se.llbit.j99.fragment;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+
 import se.llbit.j99.problem.CompileError;
 import se.llbit.j99.problem.CompileProblem;
 import se.llbit.j99.problem.FragmentMarker;
 
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Collection;
-
 public class CommentFragmenter implements Fragmenter {
 
-	private Fragmenter in;
-	private ArrayList<CompileProblem> problems;
+	private final Fragmenter in;
+	private final ArrayList<CompileProblem> problems;
 
 	public CommentFragmenter(Fragmenter in, ArrayList<CompileProblem> problems) {
 		this.in = in;
@@ -39,7 +39,7 @@ public class CommentFragmenter implements Fragmenter {
 	@Override
 	public Fragment nextFragment() throws IOException {
 		Fragment f = in.nextFragment();
-		
+
 		int start = lineCommentStart(f);
 		if (start >= 0) {
 			// It's a line comment, just chop off the rest of the line
@@ -61,14 +61,14 @@ public class CommentFragmenter implements Fragmenter {
 	private Fragment parseComment(Fragment f, int start) throws IOException {
 		Collection<Fragment> parts = new ArrayList<Fragment>();
 		Collection<Fragment> commentParts = new ArrayList<Fragment>();
-		
+
 		parts.add(f.part(0, start));
 		commentParts.add(f.part(start, f.getLength()));
 		Fragment next = f.part(start+2, f.getLength());
 		while (true) {
-			
+
 			int end = commentEnd(next);
-			
+
 			if (end >= 0) {
 				commentParts.add(next.part(0, end+2));
 				parts.add(new ReplacedFragment(
@@ -79,19 +79,19 @@ public class CommentFragmenter implements Fragmenter {
 			} else {
 				commentParts.add(next);
 			}
-			
+
 			if (!in.ready()) {
 				problems.add(new CompileError(
 						new FragmentMarker(new CompositeFragment(commentParts)),
 						"comment does not end"));
 				return new NullFragment();
 			}
-			
+
 			next = in.nextFragment();
 		}
 	}
 
-	
+
 	@Override
 	public boolean ready() throws IOException {
 		return in.ready();
@@ -99,11 +99,18 @@ public class CommentFragmenter implements Fragmenter {
 
 	private int lineCommentStart(Fragment f) {
 		for (int i = 0; i < f.getLength()-1; ++i) {
-			if (f.charAt(i) == '/') {
-				if (f.charAt(i+1) == '/')
+			char ch = f.charAt(i);
+			if (ch == '/') {
+				char ch2 = f.charAt(i+1);
+				if (ch2 == '/') {
 					return i;
-				else if (f.charAt(i+1) == '*')
+				} else if (ch2 == '*') {
 					return -1;
+				}
+			} else if (ch == '\'') {
+				i = skipCharLiteral(f, i+1);
+			} else if (ch == '"') {
+				i = skipStringLiteral(f, i+1);
 			}
 		}
 		return -1;
@@ -111,12 +118,20 @@ public class CommentFragmenter implements Fragmenter {
 
 	private int commentStart(Fragment f) {
 		for (int i = 0; i < f.getLength()-1; ++i) {
-			if (f.charAt(i) == '/' && f.charAt(i+1) == '*')
-				return i;
+			char ch = f.charAt(i);
+			if (ch == '/') {
+				if (f.charAt(i+1) == '*') {
+					return i;
+				}
+			} else if (ch == '\'') {
+				i = skipCharLiteral(f, i+1);
+			} else if (ch == '"') {
+				i = skipStringLiteral(f, i+1);
+			}
 		}
 		return -1;
 	}
-	
+
 	private int commentEnd(Fragment f) {
 		for (int i = 0; i < f.getLength()-1; ++i) {
 			if (f.charAt(i) == '*' && f.charAt(i+1) == '/')
@@ -124,7 +139,31 @@ public class CommentFragmenter implements Fragmenter {
 		}
 		return -1;
 	}
-	
+
+	private int skipCharLiteral(Fragment f, int i) {
+		for (; i < f.getLength()-1; ++i) {
+			char ch = f.charAt(i);
+			if (ch == '"') {
+				break;
+			} else if (ch == '\\') {
+				i += 1;
+			}
+		}
+		return i+1;
+	}
+
+	private int skipStringLiteral(Fragment f, int i) {
+		for (; i < f.getLength()-1; ++i) {
+			char ch = f.charAt(i);
+			if (ch == '"') {
+				break;
+			} else if (ch == '\\') {
+				i += 1;
+			}
+		}
+		return i+1;
+	}
+
 	@Override
 	public void reset() throws IOException {
 		in.reset();
